@@ -9,9 +9,50 @@ telebot.apihelper.proxy = {'http': proxy_url, 'https': proxy_url}
 conn = sqlite3.connect('accs.db',check_same_thread=False)
 cursor = conn.cursor()
 
-farmed_states={
-    True: "отфармлен",
-    False: "не отфармлен"
+COMMANDS = [
+    {"cmd": "start",
+     "desc": "Запустить бота",
+     "func": "start_func"},
+
+    {"cmd": "check",
+     "desc": "Просмотреть статус аккаунта",
+     "func": "check_user"},
+
+    {"cmd": "check_all",
+     "desc": "Просмотреть статус всех аккаунтов",
+     "func": "check_all"},
+
+    {"cmd": "farm",
+     "desc": "Отметить аккаунт отфармленным",
+     "func": "farm_account"},
+
+    {"cmd": "wednesday",
+     "desc": "Отметить все аккаунты неотфармленными",
+     "func": "clear_all"},
+
+    {"cmd": "ban",
+     "desc": "Отметить аккаунт забаненным",
+     "func": "ban_account"},
+
+    {"cmd": "add",
+     "desc": "Добавить аккаунт в базу",
+     "func": "add_account"},
+
+    {"cmd": "edit",
+     "desc": "Отметить аккаунт забаненным",
+     "func": "edit_account"},
+
+    {"cmd": "remove",
+     "desc": "Отметить аккаунт забаненным",
+     "func": "delete_account"},
+]
+
+
+tftoyesno={
+    True: "да",
+    False: "нет",
+    0:"нет",
+    1:"да"
 }
 
 cursor.execute('''
@@ -28,6 +69,7 @@ def is_user(user_id):
     if user_id in USERS:
         return True
     else:
+        bot.send_message(user_id, "К сожалению, у вас нет доступа к этому боту.")
         return False
 
 
@@ -42,17 +84,16 @@ def newaccount(number, name):
     cursor.execute("INSERT INTO accounts (number, name, farmed, banned, banned_until) VALUES (?, ?, ?, ?, ?)", (number, name, 0,0,0))
     conn.commit()
 
-@bot.message_handler(commands=['start'])
-def send_welcome(message):
+
+def start_func(message):
     if not(is_user(message.from_user.id)):
         return
     bot.send_message(message.chat.id,"Бот работает")
 
-@bot.message_handler(commands=['checkall'])
+
 def check_all(message):
     cursor.execute("SELECT name, farmed FROM accounts")
     rows = cursor.fetchall()
-    conn.close()
 
     if not rows:
         bot.reply_to(message, "Нет аккаунтов")
@@ -68,17 +109,24 @@ def check_all(message):
     final_text = "📋 **Аккаунты:**\n\n" + "\n".join(text_list)
     bot.reply_to(message,final_text,parse_mode="Markdown")
 
-@bot.message_handler(commands=['check'])
 def check_user(message):
     if not(is_user(message.from_user.id)):
         return
     args = message.text.split()
     number = args[1]
-    result = cursor.execute("SELECT * FROM accounts WHERE number = ?", (number,)).fetchall()
-    status = farmed_states[bool(result[0])]
-    bot.reply_to(message,f"Статус аккаунта {number}: {status}")
+    result = cursor.execute("SELECT * FROM accounts WHERE number = ?", (number,)).fetchone()
+    print(result)
+    name = str(result[1])
+    farmed = tftoyesno[result[2]]
+    banned = tftoyesno[result[3]]
+    banned_until = result[4]
+    bot.reply_to(message,f"\
+Аккаунт {number}\n\
+Имя: {name}\n\
+Отфармлен: {farmed}\n\
+Забанен: {banned}\n\
+Забанен до: {banned_until}")
 
-@bot.message_handler(commands=['add'])
 def add_account(message):
     if not(is_user(message.from_user.id)):
         return
@@ -93,7 +141,6 @@ def add_account(message):
         newaccount(int(number), str(name))
         bot.reply_to(message,f"Добавлен аккаунт номер {number} с ником {name}")
 
-@bot.message_handler(commands=['farm'])
 def farm_account(message):
     if not(is_user(message.from_user.id)):
         return
@@ -104,13 +151,40 @@ def farm_account(message):
             SET farmed = ? 
             WHERE number = ?
         """, (1, number))
+    conn.commit()
     bot.reply_to(message,f"Аккаунт с номером {number} отмечен как отфармленный.")
 
-@bot.message_handler(commands=['wednesday'])
 def clear_all(message):
     if not(is_user(message.from_user.id)):
         return
     cursor.execute("UPDATE accounts SET farmed = 0")
+    conn.commit()
     bot.reply_to(message,"Все аккаунты отмечены как неотфармленные.")
 
+def ban_account(message):
+    if not(is_user(message.from_user.id)):
+        return
+    args = message.text.split()
+    number = args[1]
+    date = str(args[2])
+    cursor.execute("""
+            UPDATE accounts 
+            SET banned = 1, banned_until = ? 
+            WHERE number = ?
+        """, (date, number))
+    conn.commit()
+    bot.reply_to(message,f"Аккаунт с номером {number} отмечен как забаненный до {date}.")
+
+def edit_account(message):
+    if not(is_user(message.from_user.id)):
+        return
+
+def delete_account(message):
+    if not(is_user(message.from_user.id)):
+        return
+
+bot.set_my_commands([telebot.types.BotCommand(c["cmd"], c["desc"]) for c in COMMANDS])
+for cmd in COMMANDS: # for every command in vocabulary COMMANDS, do:
+    func = globals()[cmd["func"]] # find the function in "func" that corresponds to "cmd" in vocabulary
+    bot.message_handler(commands=[cmd["cmd"]])(func) # create a handler for the found command and bind it to its found function
 bot.infinity_polling()
