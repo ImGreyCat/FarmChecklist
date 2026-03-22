@@ -4,6 +4,11 @@ import sqlite3
 from time import sleep
 
 from config import *
+try:
+    from devSettings import *
+except:
+    pass
+
 bot = telebot.TeleBot(TOKEN)
 proxy_url = f"{proxyType}://{proxyIP}:{proxyPort}"
 telebot.apihelper.proxy = {'http': proxy_url, 'https': proxy_url}
@@ -60,7 +65,7 @@ COMMANDS = [
      "func": "delete_account"},
 
     {"cmd": "auth",
-     "desc": "Использовать пароль для доступа к админ-командам",
+     "desc": "Использовать пароль для админ-команд",
      "func": "authenticate"},
 ]
 
@@ -101,7 +106,7 @@ def reset_all_users(message):
 
 def newaccount(number, name):
     try:
-        cursor.execute("INSERT INTO accounts (number, name, farmed, banned, banned_until) VALUES (?, ?, ?, ?, ?)", (number, name, 0,0,0))
+        cursor.execute("INSERT INTO accounts (number, name, profile, FRIEND, farmed, banned, banned_until) VALUES (?, ?, ?, ?, ?, ?, ?)", (number, name, "не указано","не указано",0,0,0))
     except sqlite3.IntegrityError:
         return False
     else:
@@ -244,6 +249,26 @@ def unban_account(message):
 def edit_account(message):
     if not(is_user(message.from_user.id)):
         return
+    if not authenticated[message.from_user.id]:
+        bot.reply_to(message,"Вы не аутентифицированы.\nЧтобы запустить эту команду, используйте пароль: /auth <пароль>")
+        return
+    args = message.text.split()
+    print(len(args))
+    number = args[1]
+    collumn = args[2]
+    value = " ".join(args[3:])
+    print(number,collumn,value)
+    ALLOWED_COLLUMNS = ["number", "name", "profile", "FRIEND"]
+
+    if len(args) < 4:
+        bot.reply_to(message,"Вы не указали достаточное количество аргументов.\nСинтаксис: /edit <номер аккаунта> <атрибут> <новое значение>\nДопустимые атрибуты: number, name, profile, FRIEND")
+    if collumn in ALLOWED_COLLUMNS:
+        query = f"UPDATE accounts SET {collumn} = ? WHERE number = ?"
+        cursor.execute(query, (value, number))
+        conn.commit()
+        bot.reply_to(message, f"Аккаунт с номером {number} обновлён.\n{collumn} -> {value}")
+    else:
+        bot.reply_to(message,f"Ошибка: значение атрибута {collumn} нельзя устанавливать.")
 
 def delete_account(message):
     if not(is_user(message.from_user.id)):
@@ -292,6 +317,14 @@ def migrate(message):
         return
     cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_number on accounts (number)")
     conn.commit()
+
+@bot.message_handler(commands=['execute'])
+def execute(message):
+    if not(authenticated[message.from_user.id]):
+        return
+    args = message.text.split()
+    command=" ".join(args[1:])
+    cursor.execute(command)
 
 bot.set_my_commands([telebot.types.BotCommand(c["cmd"], c["desc"]) for c in COMMANDS])
 for cmd in COMMANDS: # for every command in vocabulary COMMANDS, do:
