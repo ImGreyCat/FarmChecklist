@@ -26,6 +26,10 @@ COMMANDS = [
      "desc": "Отметить аккаунт отфармленным",
      "func": "farm_account"},
 
+    {"cmd": "unfarm",
+     "desc": "Отметить аккаунт неотфармленным",
+     "func": "farm_account"},
+
     {"cmd": "wednesday",
      "desc": "Отметить все аккаунты неотфармленными",
      "func": "clear_all"},
@@ -34,16 +38,20 @@ COMMANDS = [
      "desc": "Отметить аккаунт забаненным",
      "func": "ban_account"},
 
+    {"cmd": "unban",
+     "desc": "Отметить аккаунт забаненным",
+     "func": "unban_account"},
+
     {"cmd": "add",
      "desc": "Добавить аккаунт в базу",
      "func": "add_account"},
 
     {"cmd": "edit",
-     "desc": "Отметить аккаунт забаненным",
+     "desc": "Изменить информацию об аккаунте",
      "func": "edit_account"},
 
     {"cmd": "remove",
-     "desc": "Отметить аккаунт забаненным",
+     "desc": "Удалить аккаунт из базы",
      "func": "delete_account"},
 ]
 
@@ -57,7 +65,7 @@ tftoyesno={
 
 cursor.execute('''
     CREATE TABLE IF NOT EXISTS accounts (
-        number INTEGER,
+        number INTEGER UNIQUE,
         name TEXT,
         farmed BOOLEAN,
         banned BOOLEAN,
@@ -81,8 +89,14 @@ def reset_all_users():
     print("Статус всех задач сброшен на False")
 
 def newaccount(number, name):
-    cursor.execute("INSERT INTO accounts (number, name, farmed, banned, banned_until) VALUES (?, ?, ?, ?, ?)", (number, name, 0,0,0))
-    conn.commit()
+    try:
+        cursor.execute("INSERT INTO accounts (number, name, farmed, banned, banned_until) VALUES (?, ?, ?, ?, ?)", (number, name, 0,0,0))
+    except sqlite3.IntegrityError:
+        return False
+    else:
+        conn.commit()
+        return True
+
 
 
 def start_func(message):
@@ -92,7 +106,7 @@ def start_func(message):
 
 
 def check_all(message):
-    cursor.execute("SELECT name, farmed FROM accounts")
+    cursor.execute("SELECT name, farmed, banned FROM accounts ORDER BY number ASC")
     rows = cursor.fetchall()
 
     if not rows:
@@ -101,12 +115,13 @@ def check_all(message):
 
     # 1. Собираем все строки в один список с красивым оформлением
     text_list = []
-    for name, status in rows:
+    for name, status, banned in rows:
         icon = "✅" if status else "❌"
-        text_list.append(f"{icon} {name}")
+        icon2 = "✅" if banned else "❌"
+        text_list.append(f"{icon} {icon2} | {name}")
 
     # 2. Объединяем список в одну строку через перенос строки (\n)
-    final_text = "📋 **Аккаунты:**\n\n" + "\n".join(text_list)
+    final_text = f"📋 *{len(text_list)} аккаунтов:*\n\n" + "\n".join(text_list) + "\n\n{1} {2} | Ник\n1 - Отфармлен\n2 - Забанен"
     bot.reply_to(message,final_text,parse_mode="Markdown")
 
 def check_user(message):
@@ -119,13 +134,16 @@ def check_user(message):
     name = str(result[1])
     farmed = tftoyesno[result[2]]
     banned = tftoyesno[result[3]]
-    banned_until = result[4]
+    if result[4]==0:
+        banned_until="не забанен"
+    else:
+        banned_until = result[4]
     bot.reply_to(message,f"\
-Аккаунт {number}\n\
-Имя: {name}\n\
-Отфармлен: {farmed}\n\
-Забанен: {banned}\n\
-Забанен до: {banned_until}")
+Аккаунт *№{number}*\n\
+Имя: *{name}*\n\
+Отфармлен: *{farmed}*\n\
+Забанен: *{banned}*\n\
+Забанен до: *{banned_until}*",parse_mode="Markdown")
 
 def add_account(message):
     if not(is_user(message.from_user.id)):
@@ -138,7 +156,10 @@ def add_account(message):
     else:
         number = input[1]
         name = " ".join(input[2:])
-        newaccount(int(number), str(name))
+        result = newaccount(int(number), str(name))
+        if result == False:
+            bot.reply_to(message,f"Не удалось добавить: номер {number} уже занят.")
+            return
         bot.reply_to(message,f"Добавлен аккаунт номер {number} с ником {name}")
 
 def farm_account(message):
@@ -154,7 +175,20 @@ def farm_account(message):
     conn.commit()
     bot.reply_to(message,f"Аккаунт с номером {number} отмечен как отфармленный.")
 
-def clear_all(message):
+def unfarm_account(message):
+    if not (is_user(message.from_user.id)):
+        return
+    args = message.text.split()
+    number = args[1]
+    cursor.execute("""
+            UPDATE accounts 
+            SET farmed = ? 
+            WHERE number = ?
+        """, (0, number))
+    conn.commit()
+    bot.reply_to(message, f"Аккаунт с номером {number} отмечен как неотфармленный.")
+
+def clear_all(message): # добавить пароль рома жирный
     if not(is_user(message.from_user.id)):
         return
     cursor.execute("UPDATE accounts SET farmed = 0")
@@ -165,6 +199,9 @@ def ban_account(message):
     if not(is_user(message.from_user.id)):
         return
     args = message.text.split()
+    if len(args) < 3:
+        bot.reply_to(message,"Вы предоставили недостаточно аргументов.\nСинтаксис: /ban <ID> <дата разбана ДД.ММ>")
+        return
     number = args[1]
     date = str(args[2])
     cursor.execute("""
@@ -175,6 +212,19 @@ def ban_account(message):
     conn.commit()
     bot.reply_to(message,f"Аккаунт с номером {number} отмечен как забаненный до {date}.")
 
+def unban_account(message):
+    if not (is_user(message.from_user.id)):
+        return
+    args = message.text.split()
+    number = args[1]
+    cursor.execute("""
+            UPDATE accounts 
+            SET banned = 0, banned_until = ? 
+            WHERE number = ?
+        """, (0, number))
+    conn.commit()
+    bot.reply_to(message, f"Аккаунт с номером {number} отмечен как незабаненный.")
+
 def edit_account(message):
     if not(is_user(message.from_user.id)):
         return
@@ -182,9 +232,27 @@ def edit_account(message):
 def delete_account(message):
     if not(is_user(message.from_user.id)):
         return
+    args = message.text.split()
+    number = args[1]
+    print(number)
+    cursor.execute("""
+                DELETE FROM accounts WHERE number = ?
+            """, (number,))
+    conn.commit()
+    bot.reply_to(message, f"Аккаунт с номером {number} удалён из базы.")
+
+@bot.message_handler(commands=['migrate'])
+def migrate(message):
+    if not(is_user(message.from_user.id)):
+        return
+    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_number on accounts (number)")
+    conn.commit()
 
 bot.set_my_commands([telebot.types.BotCommand(c["cmd"], c["desc"]) for c in COMMANDS])
 for cmd in COMMANDS: # for every command in vocabulary COMMANDS, do:
     func = globals()[cmd["func"]] # find the function in "func" that corresponds to "cmd" in vocabulary
     bot.message_handler(commands=[cmd["cmd"]])(func) # create a handler for the found command and bind it to its found function
+
+cursor.execute("PRAGMA index_list('accounts')")
+print(cursor.fetchall())
 bot.infinity_polling()
