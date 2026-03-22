@@ -1,5 +1,7 @@
+import threading
 import telebot
 import sqlite3
+from time import sleep
 
 from config import *
 bot = telebot.TeleBot(TOKEN)
@@ -8,6 +10,9 @@ telebot.apihelper.proxy = {'http': proxy_url, 'https': proxy_url}
 
 conn = sqlite3.connect('accs.db',check_same_thread=False)
 cursor = conn.cursor()
+
+authenticated = {}
+authDurationSec = authDuration*60
 
 COMMANDS = [
     {"cmd": "start",
@@ -53,6 +58,10 @@ COMMANDS = [
     {"cmd": "remove",
      "desc": "Удалить аккаунт из базы",
      "func": "delete_account"},
+
+    {"cmd": "auth",
+     "desc": "Использовать пароль для доступа к админ-командам",
+     "func": "authenticate"},
 ]
 
 
@@ -67,6 +76,8 @@ cursor.execute('''
     CREATE TABLE IF NOT EXISTS accounts (
         number INTEGER UNIQUE,
         name TEXT,
+        profile TEXT,
+        FRIEND TEXT,
         farmed BOOLEAN,
         banned BOOLEAN,
         banned_until DATETIME
@@ -81,12 +92,12 @@ def is_user(user_id):
         return False
 
 
-def reset_all_users():
+def reset_all_users(message):
     # Устанавливаем false во всей колонке is_done
     cursor.execute("UPDATE todo SET is_farmed = 0")
 
     conn.commit()
-    print("Статус всех задач сброшен на False")
+    bot.reply_to(message,"Все аккаунты отмечены как неотфармленные.")
 
 def newaccount(number, name):
     try:
@@ -191,6 +202,11 @@ def unfarm_account(message):
 def clear_all(message): # добавить пароль рома жирный
     if not(is_user(message.from_user.id)):
         return
+
+    if not authenticated[message.from_user.id]:
+        bot.reply_to(message,"Вы не аутентифицированы.\nЧтобы запустить эту команду, используйте пароль: /auth <пароль>")
+        return
+
     cursor.execute("UPDATE accounts SET farmed = 0")
     conn.commit()
     bot.reply_to(message,"Все аккаунты отмечены как неотфармленные.")
@@ -235,11 +251,40 @@ def delete_account(message):
     args = message.text.split()
     number = args[1]
     print(number)
+    if not authenticated[message.from_user.id]:
+        bot.reply_to(message,"Вы не аутентифицированы.\nЧтобы запустить эту команду, используйте пароль: /auth <пароль>")
+        return
     cursor.execute("""
                 DELETE FROM accounts WHERE number = ?
             """, (number,))
     conn.commit()
     bot.reply_to(message, f"Аккаунт с номером {number} удалён из базы.")
+
+def auth_timer(user_id):
+    sleep(authDurationSec)
+    authenticated[user_id] = False
+
+def authenticate(message):
+    if not(is_user(message.from_user.id)):
+        return
+    if authenticated[message.from_user.id]:
+        bot.reply_to(message,"Вы уже аутентифицированы.")
+        return
+    args = message.text.split()
+    if len(args) < 2:
+        bot.reply_to(message,"Вы не указали пароль.\nСинтаксис: /auth <пароль>")
+        return
+    if " ".join(args[1:]) != authPassword:
+        bot.reply_to(message,"Вы ввели неверный пароль.")
+        return
+    user_id = message.from_user.id
+    authenticated[user_id] = True
+    threading.Thread(target=auth_timer, args=(user_id,), daemon=True).start()
+    bot.reply_to(message,f"Вы успешно аутентифицированы на *{authDuration} минут*.",parse_mode="Markdown")
+
+@bot.message_handler(commands=["checkauth"])
+def check_auth(message):
+    bot.reply_to(message,str(authenticated[message.from_user.id]))
 
 @bot.message_handler(commands=['migrate'])
 def migrate(message):
@@ -253,6 +298,6 @@ for cmd in COMMANDS: # for every command in vocabulary COMMANDS, do:
     func = globals()[cmd["func"]] # find the function in "func" that corresponds to "cmd" in vocabulary
     bot.message_handler(commands=[cmd["cmd"]])(func) # create a handler for the found command and bind it to its found function
 
-cursor.execute("PRAGMA index_list('accounts')")
-print(cursor.fetchall())
+for uid in USERS:
+    authenticated[uid] = False
 bot.infinity_polling()
