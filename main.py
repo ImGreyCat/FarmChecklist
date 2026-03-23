@@ -142,7 +142,7 @@ def newaccount(number, name):
 def start_func(message):
     if not(is_user(message.from_user.id)):
         return
-    bot.send_message(message.chat.id,"Бот работает")
+    bot.send_message(message.chat.id,f"Бот активен и вы находитесь в списке пользователей!\nДоступ к админ-командам: {tftoyesno[authenticated[message.from_user.id]]}")
 
 
 def check_all(message):
@@ -277,11 +277,9 @@ def edit_account(message):
         bot.reply_to(message,"Вы не аутентифицированы.\nЧтобы запустить эту команду, используйте пароль: /auth <пароль>")
         return
     args = message.text.split()
-    print(len(args))
     number = args[1]
     collumn = args[2]
     value = " ".join(args[3:])
-    print(number,collumn,value)
     ALLOWED_COLLUMNS = ["number", "name", "profile", "FRIEND"]
 
     if len(args) < 4:
@@ -349,6 +347,14 @@ def execute(message):
     args = message.text.split()
     command=" ".join(args[1:])
     cursor.execute(command)
+
+def friend(messages):
+    for message in messages:
+        if message.text and ("friend" in message.text.lower() or "друг" in message.text.lower()):
+            print("FRIEND")
+            bot.send_sticker(message.chat.id,sticker=open('FRIEND.webm','rb'))
+
+bot.set_update_listener(friend)
 
 bot.set_my_commands([telebot.types.BotCommand(c["cmd"], c["desc"]) for c in COMMANDS])
 for cmd in COMMANDS: # for every command in vocabulary COMMANDS, do:
