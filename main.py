@@ -13,6 +13,30 @@ bot = telebot.TeleBot(TOKEN)
 proxy_url = f"{proxyType}://{proxyIP}:{proxyPort}"
 telebot.apihelper.proxy = {'http': proxy_url, 'https': proxy_url}
 
+if useProxy is True:
+    print("Подключение через прокси...")
+    if proxyUsername and proxyPassword:
+        # Authenticated format: protocol://user:pass@ip:port
+        proxy_url = f"{proxyType}://{proxyUsername}:{proxyPassword}@{proxyIP}:{proxyPort}"
+    else:
+        # Standard format: protocol://ip:port
+        proxy_url = f"{proxyType}://{proxyIP}:{proxyPort}"
+    telebot.apihelper.proxy = {'http': proxy_url, 'https': proxy_url}
+    try:
+        me = bot.get_me()
+        print(f"Успешное подключение к боту @{me.username} через прокси")
+    except Exception as e:
+        print(f"Не удалось подключиться через прокси: {e}")
+        raise SystemExit
+else:
+    print("Подключение...")
+    try:
+        me = bot.get_me()
+        print(f"Успешное подключение к боту @{me.username}")
+    except Exception as e:
+        print(f"Не удалось подключиться: {e}")
+        raise SystemExit
+
 conn = sqlite3.connect('accs.db',check_same_thread=False)
 cursor = conn.cursor()
 
