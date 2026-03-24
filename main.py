@@ -120,6 +120,11 @@ def is_user(user_id):
         bot.send_message(user_id, "К сожалению, у вас нет доступа к этому боту.")
         return False
 
+def is_authenticated(message):
+    if authenticated[message.from_user.id] == True:
+        return True
+    bot.reply_to(message, "Вы не аутентифицированы.\nЧтобы запустить эту команду, используйте пароль: /auth <пароль>")
+    return False
 
 def reset_all_users(message):
     # Устанавливаем false во всей колонке is_done
@@ -229,11 +234,7 @@ def unfarm_account(message):
     bot.reply_to(message, f"Аккаунт с номером {number} отмечен как неотфармленный.")
 
 def clear_all(message): # добавить пароль рома жирный
-    if not(is_user(message.from_user.id)):
-        return
-
-    if not authenticated[message.from_user.id]:
-        bot.reply_to(message,"Вы не аутентифицированы.\nЧтобы запустить эту команду, используйте пароль: /auth <пароль>")
+    if not(is_user(message.from_user.id) and is_user(message.from_user.id)):
         return
 
     cursor.execute("UPDATE accounts SET farmed = 0")
