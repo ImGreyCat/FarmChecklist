@@ -234,7 +234,7 @@ def unfarm_account(message):
     bot.reply_to(message, f"Аккаунт с номером {number} отмечен как неотфармленный.")
 
 def clear_all(message): # добавить пароль рома жирный
-    if not(is_user(message.from_user.id) and is_user(message.from_user.id)):
+    if not(is_user(message.from_user.id) and is_authenticated(message)):
         return
 
     cursor.execute("UPDATE accounts SET farmed = 0")
@@ -272,11 +272,9 @@ def unban_account(message):
     bot.reply_to(message, f"Аккаунт с номером {number} отмечен как незабаненный.")
 
 def edit_account(message):
-    if not(is_user(message.from_user.id)):
+    if not(is_user(message.from_user.id) and is_authenticated(message)):
         return
-    if not authenticated[message.from_user.id]:
-        bot.reply_to(message,"Вы не аутентифицированы.\nЧтобы запустить эту команду, используйте пароль: /auth <пароль>")
-        return
+
     args = message.text.split()
     number = args[1]
     collumn = args[2]
@@ -294,14 +292,12 @@ def edit_account(message):
         bot.reply_to(message,f"Ошибка: значение атрибута {collumn} нельзя устанавливать.")
 
 def delete_account(message):
-    if not(is_user(message.from_user.id)):
+    if not(is_user(message.from_user.id) and is_authenticated(message)):
         return
     args = message.text.split()
     number = args[1]
     print(number)
-    if not authenticated[message.from_user.id]:
-        bot.reply_to(message,"Вы не аутентифицированы.\nЧтобы запустить эту команду, используйте пароль: /auth <пароль>")
-        return
+
     cursor.execute("""
                 DELETE FROM accounts WHERE number = ?
             """, (number,))
