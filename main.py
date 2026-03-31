@@ -237,7 +237,7 @@ def unfarm_account(message):
     conn.commit()
     bot.reply_to(message, f"Аккаунт с номером {number} отмечен как неотфармленный.")
 
-def clear_all(message): # добавить пароль рома жирный
+def clear_all(message):
     if not(is_user(message.from_user.id) and is_authenticated(message)):
         return
 
@@ -302,9 +302,7 @@ def delete_account(message):
     number = args[1]
     print(number)
 
-    cursor.execute("""
-                DELETE FROM accounts WHERE number = ?
-            """, (number,))
+    cursor.execute("DELETE FROM accounts WHERE number = ?", (number,))
     conn.commit()
     bot.reply_to(message, f"Аккаунт с номером {number} удалён из базы.")
 
@@ -312,7 +310,7 @@ def auth_timer(user_id):
     sleep(authDurationSec)
     authenticated[user_id] = False
 
-def authenticate(message):
+def authenticate(message): # if else if else if else if else if else if else if else if else if else
     if not(is_user(message.from_user.id)):
         return
     if authenticated[message.from_user.id]:
@@ -330,11 +328,7 @@ def authenticate(message):
     threading.Thread(target=auth_timer, args=(user_id,), daemon=True).start()
     bot.reply_to(message,f"Вы успешно аутентифицированы на *{authDuration} минут*.",parse_mode="Markdown")
 
-@bot.message_handler(commands=["checkauth"])
-def check_auth(message):
-    bot.reply_to(message,str(authenticated[message.from_user.id]))
-
-@bot.message_handler(commands=['migrate'])
+@bot.message_handler(commands=['migrate']) # create unique index for the numbers (to migrate from older versions without the unique index)
 def migrate(message):
     if not(is_user(message.from_user.id)):
         return
