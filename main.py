@@ -5,7 +5,7 @@ from time import sleep
 
 from config import *
 try:
-    from devSettings import *
+    from devSettings import * # for development stuff
 except:
     pass
 
@@ -37,10 +37,18 @@ else:
         print(f"Не удалось подключиться: {e}")
         raise SystemExit
 
-conn = sqlite3.connect('accs.db',check_same_thread=False)
-cursor = conn.cursor()
+if not dbFilename:
+    dbFilename = "accs"
 
-authenticated = {}
+print("Установка соединения с базой...")
+try:
+    conn = sqlite3.connect(str(dbFilename)+".db",check_same_thread=False)
+    cursor = conn.cursor()
+except Exception as e:
+    print(f"Произошла ошибка при установке соединения: {e}")
+    print(f"Имя файла: {dbFilename}.db")
+
+
 authDurationSec = authDuration*60
 
 COMMANDS = [
@@ -109,7 +117,9 @@ cursor.execute('''
         FRIEND TEXT,
         farmed BOOLEAN,
         banned BOOLEAN,
-        banned_until DATETIME
+        banned_until DATETIME,
+        email TEXT,
+        password TEXT
     )
 ''')
 
@@ -342,6 +352,13 @@ def execute(message):
     args = message.text.split()
     command=" ".join(args[1:])
     cursor.execute(command)
+    conn.commit()
+
+def close_connection(message):
+    if not(is_user(message.from_user.id) and is_authenticated(message)):
+        return
+    conn.close()
+    print("Соединение закрыто")
 
 def friend(messages):
     for message in messages:
@@ -356,6 +373,7 @@ for cmd in COMMANDS: # for every command in vocabulary COMMANDS, do:
     func = globals()[cmd["func"]] # find the function in "func" that corresponds to "cmd" in vocabulary
     bot.message_handler(commands=[cmd["cmd"]])(func) # create a handler for the found command and bind it to its found function
 
+authenticated=[]
 for uid in USERS:
     authenticated[uid] = False
 bot.infinity_polling()
