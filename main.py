@@ -179,6 +179,8 @@ def check_user(message):
     name = str(result[1])
     farmed = tftoyesno[result[2]]
     banned = tftoyesno[result[3]]
+    link = result[4]
+    friend = result[5]
     if result[4]==0:
         banned_until="не забанен"
     else:
@@ -186,6 +188,8 @@ def check_user(message):
     bot.reply_to(message,f"\
 Аккаунт *№{number}*\n\
 Имя: *{name}*\n\
+Ссылка на профиль: *{link}*\n\
+Код друга: *{friend}*\n\
 Отфармлен: *{farmed}*\n\
 Забанен: *{banned}*\n\
 Забанен до: *{banned_until}*",parse_mode="Markdown")
