@@ -342,20 +342,73 @@ def authenticate(message): # if else if else if else if else if else if else if 
 
 @bot.message_handler(commands=['migrate']) # create unique index for the numbers (to migrate from older versions without the unique index)
 def migrate(message):
-    if not(is_user(message.from_user.id)):
+    if not(is_user(message.from_user.id) and is_authenticated(message)):
         return
-    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_number on accounts (number)")
-    conn.commit()
+    bot.reply_to(message,"Начинаю миграцию таблицы...")
+
+    new_schema = """
+        CREATE TABLE IF NOT EXISTS accounts (
+            number INTEGER UNIQUE,
+            name TEXT,
+            profile TEXT,
+            FRIEND TEXT,
+            farmed BOOLEAN,
+            banned BOOLEAN,
+            banned_until DATETIME,
+            email TEXT,
+            password TEXT
+        )
+    """
+
+    try:
+        # 2. Get columns that currently exist in the old table
+        cursor.execute("PRAGMA table_info(accounts)")
+        old_cols = {row[1] for row in cursor.fetchall()}
+
+        if not old_cols:
+            # Table doesn't exist yet, just create it
+            cursor.execute(new_schema)
+            conn.commit()
+            print("Table created from scratch.")
+            return
+
+        # 3. Rename the current table to keep it as a backup during migration
+        cursor.execute("ALTER TABLE accounts RENAME TO old_accounts")
+
+        # 4. Create the new table
+        cursor.execute(new_schema)
+
+        # 5. Identify columns that exist in BOTH old and new formats
+        cursor.execute("PRAGMA table_info(accounts)")
+        new_cols = {row[1] for row in cursor.fetchall()}
+
+        common_cols = list(old_cols.intersection(new_cols))
+        cols_str = ", ".join(common_cols)
+
+        # 6. Transfer the data
+        if common_cols:
+            cursor.execute(f"INSERT INTO accounts ({cols_str}) SELECT {cols_str} FROM old_accounts")
+
+        # 7. Clean up
+        cursor.execute("DROP TABLE old_accounts")
+        conn.commit()
+        bot.reply_to(message,f"Миграция завершена успешно. Перенесено: {common_cols}")
+
+    except sqlite3.Error as e:
+        conn.rollback()
+        bot.reply_to(message,f"Произошла ошибка при миграции: {e}")
 
 @bot.message_handler(commands=['execute'])
 def execute(message):
     if not(authenticated[message.from_user.id]):
+        print("Ошибка аутентификации")
         return
     args = message.text.split()
     command=" ".join(args[1:])
     cursor.execute(command)
     conn.commit()
 
+@bot.message_handler(commands=['disconnect'])
 def close_connection(message):
     if not(is_user(message.from_user.id) and is_authenticated(message)):
         return
