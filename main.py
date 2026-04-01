@@ -10,8 +10,6 @@ except:
     pass
 
 bot = telebot.TeleBot(TOKEN)
-proxy_url = f"{proxyType}://{proxyIP}:{proxyPort}"
-telebot.apihelper.proxy = {'http': proxy_url, 'https': proxy_url}
 
 if useProxy is True:
     print("Подключение через прокси...")
@@ -40,13 +38,16 @@ else:
 if not dbFilename:
     dbFilename = "accs"
 
-print("Установка соединения с базой...")
+print(f"Установка соединения с базой {dbFilename}.db ...")
 try:
     conn = sqlite3.connect(str(dbFilename)+".db",check_same_thread=False)
     cursor = conn.cursor()
 except Exception as e:
     print(f"Произошла ошибка при установке соединения: {e}")
     print(f"Имя файла: {dbFilename}.db")
+    raise SystemExit
+else:
+    print("Успешное подключение")
 
 
 authDurationSec = authDuration*60
@@ -102,7 +103,8 @@ COMMANDS = [
 ]
 
 
-tftoyesno={
+fancystuff={
+    None: "не указано",
     True: "да",
     False: "нет",
     0:"нет",
@@ -145,7 +147,7 @@ def reset_all_users(message):
 
 def newaccount(number, name):
     try:
-        cursor.execute("INSERT INTO accounts (number, name, profile, FRIEND, farmed, banned, banned_until) VALUES (?, ?, ?, ?, ?, ?, ?)", (number, name, "не указано","не указано",0,0,0))
+        cursor.execute("INSERT INTO accounts (number, name, profile, FRIEND, farmed, banned, banned_until) VALUES (?, ?, ?, ?, ?, ?, ?)", (number, name, None,None,0,0,None))
     except sqlite3.IntegrityError:
         return False
     else:
@@ -157,7 +159,7 @@ def newaccount(number, name):
 def start_func(message):
     if not(is_user(message.from_user.id)):
         return
-    bot.send_message(message.chat.id,f"Бот активен и вы находитесь в списке пользователей!\nДоступ к админ-командам: {tftoyesno[authenticated[message.from_user.id]]}")
+    bot.send_message(message.chat.id,f"Бот активен и вы находитесь в списке пользователей!\nДоступ к админ-командам: {fancystuff[authenticated[message.from_user.id]]}")
 
 
 def check_all(message):
