@@ -215,6 +215,7 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# database file
-accs.db
+# database files
+*.db
+
 devSettings.py
