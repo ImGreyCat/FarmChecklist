@@ -185,7 +185,7 @@ def check_all(message):
     if len(text_list)%10==1:
         s=""
     # 2. Объединяем список в одну строку через перенос строки (\n)
-    final_text = f"📋 *{len(text_list)} аккаунтов:*\n\n" + "\n".join(text_list) + "\n\n{1} {2} | Ник\n1 - Отфармлен\n2 - Забанен"
+    final_text = f"📋 *{len(text_list)} аккаунт{s}:*\n\n" + "\n".join(text_list) + "\n\n{1} {2} | Ник\n1 - Отфармлен\n2 - Забанен"
     bot.reply_to(message,final_text,parse_mode="Markdown")
 
 def check_user(message):
@@ -321,6 +321,12 @@ def unban_account(message):
     conn.commit()
     bot.reply_to(message, f"Аккаунт с номером {number} отмечен как незабаненный.")
 
+def trigger_bancheck(message):
+    id = message.from_user.id
+    if not(is_user(id)):
+        return
+    check_expired_bans(True,id)
+
 def edit_account(message):
     if not(is_user(message.from_user.id) and is_authenticated(message)):
         return
@@ -447,7 +453,59 @@ def close_connection(message):
     if not(is_user(message.from_user.id) and is_authenticated(message)):
         return
     conn.close()
-    print("Соединение закрыто")
+    print("Соединение с базой данных закрыто")
+
+@bot.message_handler(commands=['connect'])
+def connect(message):
+    if not(is_user(message.from_user.id) and is_authenticated(message)):
+        return
+    args = message.text.split()
+    print(args)
+    print(len(args))
+    if len(args) < 2:
+        bot.reply_to(message,"Укажите имя базы для подключения.")
+        return
+    if len(args) > 2:
+        bot.reply_to(message, "Использование пробелов не допускается.")
+        return
+    global conn
+    global cursor
+
+    try: # try to close an open connection if there's one
+        conn.close()
+        cursor.close()
+    except:
+        pass
+
+    try:
+        conn = sqlite3.connect(str(args[1])+".db", check_same_thread=False)
+        cursor=conn.cursor()
+    except Exception as e:
+        bot.reply_to(message,f"Произошла ошибка при подключении: {e}")
+    else:
+        bot.reply_to(message, f"Успешное подключение к базе {args[1]}.db!\nЧтобы создать таблицу аккаунтов (если вы ещё это не сделали), используйте */initialize*",parse_mode="Markdown")
+
+@bot.message_handler(commands=['initialize'])
+def initialize_db(message):
+    if not(is_user(message.from_user.id) and is_authenticated(message)):
+        return
+    try:
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS accounts (
+                number INTEGER UNIQUE,
+                name TEXT,
+                profile TEXT,
+                FRIEND TEXT,
+                farmed BOOLEAN,
+                banned BOOLEAN,
+                banned_until DATETIME,
+                email TEXT,
+                password TEXT
+            )
+        ''')
+    except Exception as e:
+        bot.reply_to(message,f"Произошла ошибка при инициализации: {e}")
+
 
 def friend(messages):
     for message in messages:
@@ -457,6 +515,39 @@ def friend(messages):
 
 bot.set_update_listener(friend)
 
+
+def check_expired_bans(force=False,user_id=None):
+    print("Проверка аккаунтов на истёкшие баны...")
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    cursor.execute("SELECT number, name FROM accounts WHERE banned = 1 AND banned_until <= ?", (today,))
+    expired_accounts = cursor.fetchall()
+
+    if expired_accounts:
+        account_list = "\n".join([f"№{acc[0]}: {acc[1]}" for acc in expired_accounts])
+        print(f"Обнаружены аккаунты с истёкшим баном! ")
+        append="\nОни не были отмечены разбаненными автоматически. Необходимо сделать это вручную: /unban <номер>"
+        if clearUnbansOnStart is True or force is True:
+            append="\nОни были отмечены разбаненными автоматически."
+            cursor.execute("""
+                UPDATE accounts 
+                SET banned = 0, banned_until = 0 
+                WHERE banned = 1 AND banned_until <= ?
+            """, (today,))
+            conn.commit()
+            if force is True:
+                bot.send_message(user_id,f"Обнаружены и отмечены разбаненными следующие аккаунты:\n{account_list}")
+        if checkUnbansOnStart is True and force is False:
+            print("Рассылка сообщения об истёкших банах...")
+            for user_id in USERS:
+                bot.send_message(user_id,f"Обнаружены аккаунты с истёкшим баном:\n{account_list}"+append)
+
+    else:
+        print("Истёкших банов не найдено.")
+        if force is True:
+            bot.send_message(user_id,"Истёкших банов не найдено.")
+
+
 bot.set_my_commands([telebot.types.BotCommand(c["cmd"], c["desc"]) for c in COMMANDS])
 for cmd in COMMANDS: # for every command in vocabulary COMMANDS, do:
     func = globals()[cmd["func"]] # find the function in "func" that corresponds to "cmd" in vocabulary
@@ -465,4 +556,5 @@ for cmd in COMMANDS: # for every command in vocabulary COMMANDS, do:
 authenticated={}
 for uid in USERS:
     authenticated[uid] = False
+check_expired_bans()
 bot.infinity_polling()
