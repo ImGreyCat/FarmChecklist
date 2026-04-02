@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 import threading
 import telebot
 import sqlite3
@@ -262,17 +263,30 @@ def ban_account(message):
         return
     args = message.text.split()
     if len(args) < 3:
-        bot.reply_to(message,"Вы предоставили недостаточно аргументов.\nСинтаксис: /ban <ID> <дата разбана ДД.ММ>")
+        bot.reply_to(message,"Вы предоставили недостаточно аргументов.\nСинтаксис: /ban <ID> <количетсво дней бана>")
         return
     number = args[1]
-    date = str(args[2])
-    cursor.execute("""
-            UPDATE accounts 
-            SET banned = 1, banned_until = ? 
-            WHERE number = ?
-        """, (date, number))
-    conn.commit()
-    bot.reply_to(message,f"Аккаунт с номером {number} отмечен как забаненный до {date}.")
+    result = cursor.execute("SELECT banned FROM accounts WHERE number = ?", (number,)).fetchone()
+    if 1 in result:
+        bot.reply_to(message,f"Ошибка: этот аккаунт уже отмечен забаненным.\nСначала разбаньте его: /unban {number}")
+        return
+    try:
+        days=int(args[2])
+        if not 1 <= days <= 1024:
+            bot.reply_to(message,"Недопустимый диапозон дней.")
+            return
+        unban_date_obj = datetime.now() + timedelta(days=days)
+        iso_date = unban_date_obj.strftime("%Y-%m-%d")
+        cursor.execute("""
+                    UPDATE accounts 
+                    SET banned = 1, banned_until = ? 
+                    WHERE number = ?
+                """, (iso_date, number))
+        conn.commit()
+    except ValueError:
+        bot.reply_to(message,"Пожалуйста, предоставьте действительное количество дней бана.")
+    else:
+        bot.reply_to(message,f"Аккаунт {number} отмечен забаненным на {days} дней (до {unban_date_obj.strftime('%d.%m')})")
 
 def unban_account(message):
     if not (is_user(message.from_user.id)):
@@ -295,11 +309,11 @@ def edit_account(message):
     number = args[1]
     collumn = args[2]
     value = " ".join(args[3:])
-    ALLOWED_COLLUMNS = ["number", "name", "profile", "FRIEND"]
+    ALLOWED_COLLUMNS = ["number", "name", "profile", "FRIEND", "email", "password"]
 
     if len(args) < 4:
         bot.reply_to(message,"Вы не указали достаточное количество аргументов.\nСинтаксис: /edit <номер аккаунта> <атрибут> <новое значение>\nДопустимые атрибуты: number, name, profile, FRIEND")
-    if collumn in ALLOWED_COLLUMNS:
+    if collumn.lower() in ALLOWED_COLLUMNS:
         query = f"UPDATE accounts SET {collumn} = ? WHERE number = ?"
         cursor.execute(query, (value, number))
         conn.commit()
