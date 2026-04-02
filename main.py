@@ -48,7 +48,7 @@ except Exception as e:
     print(f"Имя файла: {dbFilename}.db")
     raise SystemExit
 else:
-    print("Успешное подключение")
+    print("Подключение успешно!")
 
 
 authDurationSec = authDuration*60
@@ -85,6 +85,10 @@ COMMANDS = [
     {"cmd": "unban",
      "desc": "Отметить аккаунт забаненным",
      "func": "unban_account"},
+
+    {"cmd": "check_bans",
+     "desc": "Автоматическая проверка банов",
+     "func": "trigger_bancheck"},
 
     {"cmd": "add",
      "desc": "Добавить аккаунт в базу",
@@ -177,7 +181,9 @@ def check_all(message):
         icon = "✅" if status else "❌"
         icon2 = "✅" if banned else "❌"
         text_list.append(f"{icon} {icon2} | {name}")
-
+    s="ов"
+    if len(text_list)%10==1:
+        s=""
     # 2. Объединяем список в одну строку через перенос строки (\n)
     final_text = f"📋 *{len(text_list)} аккаунтов:*\n\n" + "\n".join(text_list) + "\n\n{1} {2} | Ник\n1 - Отфармлен\n2 - Забанен"
     bot.reply_to(message,final_text,parse_mode="Markdown")
@@ -188,24 +194,38 @@ def check_user(message):
     args = message.text.split()
     number = args[1]
     result = cursor.execute("SELECT * FROM accounts WHERE number = ?", (number,)).fetchone()
-    print(result)
-    name = str(result[1])
-    farmed = tftoyesno[result[2]]
-    banned = tftoyesno[result[3]]
-    link = result[4]
-    friend = result[5]
-    if result[4]==0:
-        banned_until="не забанен"
-    else:
-        banned_until = result[4]
-    bot.reply_to(message,f"\
+    print(result) # [0] number [1] name [2] profile [3] friend [4] farmed [5] banned [6] banned until [7] email [8] password
+    if result is None:
+        bot.reply_to(message,f"Аккаунт с номером {number} не был найден в базе.")
+        return
+
+    try:
+        name = str(result[1])
+        link = result[2]
+        friend = result[3]
+        farmed = fancystuff[result[4]]
+        banned = fancystuff[result[5]]
+        email = result[7]
+        password = result[8]
+        if result[6] == 0:
+            banned_until = "не забанен"
+        else:
+            date = result[6]
+            date_object = datetime.strptime(date, '%Y-%m-%d')
+            banned_until = f"{date_object.day}.{date_object.month:02}"
+
+        bot.reply_to(message,f"\
 Аккаунт *№{number}*\n\
 Имя: *{name}*\n\
 Ссылка на профиль: *{link}*\n\
 Код друга: *{friend}*\n\
 Отфармлен: *{farmed}*\n\
 Забанен: *{banned}*\n\
-Забанен до: *{banned_until}*",parse_mode="Markdown")
+Забанен до: *{banned_until}*\n\
+Почта: *{email}*\n\
+Пароль: *{password}*",parse_mode="Markdown")
+    except Exception as e:
+        bot.reply_to(message,f"Произошла ошибка при отправке красивого сообщения: {e}.\nРезультат: {result}")
 
 def add_account(message):
     if not(is_user(message.from_user.id)):
@@ -442,7 +462,7 @@ for cmd in COMMANDS: # for every command in vocabulary COMMANDS, do:
     func = globals()[cmd["func"]] # find the function in "func" that corresponds to "cmd" in vocabulary
     bot.message_handler(commands=[cmd["cmd"]])(func) # create a handler for the found command and bind it to its found function
 
-authenticated=[]
+authenticated={}
 for uid in USERS:
     authenticated[uid] = False
 bot.infinity_polling()
