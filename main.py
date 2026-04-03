@@ -44,8 +44,7 @@ try:
     conn = sqlite3.connect(str(dbFilename)+".db",check_same_thread=False)
     cursor = conn.cursor()
 except Exception as e:
-    print(f"Произошла ошибка при установке соединения: {e}")
-    print(f"Имя файла: {dbFilename}.db")
+    print(f"Произошла ошибка при установке соединения с базой {dbFilename}.db: {e}")
     raise SystemExit
 else:
     print("Подключение успешно!")
@@ -142,13 +141,6 @@ def is_authenticated(message):
         return True
     bot.reply_to(message, "Вы не аутентифицированы.\nЧтобы запустить эту команду, используйте пароль: /auth <пароль>")
     return False
-
-def reset_all_users(message):
-    # Устанавливаем false во всей колонке is_done
-    cursor.execute("UPDATE todo SET is_farmed = 0")
-
-    conn.commit()
-    bot.reply_to(message,"Все аккаунты отмечены как неотфармленные.")
 
 def newaccount(number, name):
     try:
@@ -335,11 +327,11 @@ def edit_account(message):
     number = args[1]
     collumn = args[2]
     value = " ".join(args[3:])
-    ALLOWED_COLLUMNS = ["number", "name", "profile", "FRIEND", "email", "password"]
+    ALLOWED_COLUMNS = ["number", "name", "profile", "FRIEND", "email", "password"]
 
     if len(args) < 4:
         bot.reply_to(message,"Вы не указали достаточное количество аргументов.\nСинтаксис: /edit <номер аккаунта> <атрибут> <новое значение>\nДопустимые атрибуты: number, name, profile, FRIEND")
-    if collumn.lower() in ALLOWED_COLLUMNS:
+    if collumn.lower() in ALLOWED_COLUMNS:
         query = f"UPDATE accounts SET {collumn} = ? WHERE number = ?"
         cursor.execute(query, (value, number))
         conn.commit()
