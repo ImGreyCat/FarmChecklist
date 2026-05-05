@@ -101,11 +101,14 @@ COMMANDS = [
      "desc": "Удалить аккаунт из базы",
      "func": "delete_account"},
 
+    {"cmd": "autocommit",
+     "desc": "Настройка автосохранения",
+     "func": "autocommit"},
+
     {"cmd": "auth",
      "desc": "Использовать пароль для админ-команд",
      "func": "authenticate"},
 ]
-
 
 fancystuff={
     None: "не указано",
@@ -176,7 +179,9 @@ def check_all(message):
     s="ов"
     if len(text_list)%10==1:
         s=""
-    # 2. Объединяем список в одну строку через перенос строки (\n)
+    if len(text_list)%10 in [2,3,4]:
+        s="а"
+    # 2. Объединяем список в одну строку
     final_text = f"📋 *{len(text_list)} аккаунт{s}:*\n\n" + "\n".join(text_list) + "\n\n{1} {2} | Ник\n1 - Отфармлен\n2 - Забанен"
     bot.reply_to(message,final_text,parse_mode="Markdown")
 
