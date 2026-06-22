@@ -53,13 +53,13 @@ else:
 authDurationSec = authDuration*60
 
 commit_cmds=[
-    # {"cmd": "commit",
-    # "desc": "Сохранить изменения в базе",
-    # "func": "commit_cmd"},
-    #
-    # {"cmd": "rollback",
-    #  "desc": "Отменить несохранённые изменения",
-    #  "func": "rollback_cmd"}
+    {"cmd": "commit",
+    "desc": "Сохранить изменения в базе",
+    "func": "commit_cmd"},
+
+    {"cmd": "rollback",
+     "desc": "Отменить несохранённые изменения",
+     "func": "rollback_cmd"}
 ]
 
 COMMANDS = [
@@ -111,9 +111,9 @@ COMMANDS = [
      "desc": "Удалить аккаунт из базы",
      "func": "delete_account"},
 
-    # {"cmd": "autocommit",
-    #  "desc": "Настройка автосохранения",
-    #  "func": "autocommit"},
+    {"cmd": "autocommit",
+     "desc": "Настройка автосохранения",
+     "func": "autocommit"},
 
     {"cmd": "auth",
      "desc": "Использовать пароль для админ-команд",
@@ -127,6 +127,14 @@ fancystuff={
     0:"нет",
     1:"да"
 }
+
+def update(action, force=False):
+    if (autoCommit or force) != True:
+        return
+    if action=="commit":
+        conn.commit()
+    if action=="rollback":
+        conn.rollback()
 
 cursor.execute('''
     CREATE TABLE IF NOT EXISTS accounts (
@@ -161,7 +169,8 @@ def newaccount(number, name):
     except sqlite3.IntegrityError:
         return False
     else:
-        conn.commit()
+        update("commit")
+        # conn.commit()
         return True
 
 
@@ -267,6 +276,8 @@ def farm_account(message):
             WHERE number = ?
         """, (1, number))
     conn.commit()
+    update("commit")
+    # conn.commit()
     bot.reply_to(message,f"Аккаунт с номером {number} отмечен как отфармленный.")
 
 def unfarm_account(message):
@@ -280,6 +291,8 @@ def unfarm_account(message):
             WHERE number = ?
         """, (0, number))
     conn.commit()
+    update("commit")
+    # conn.commit()
     bot.reply_to(message, f"Аккаунт с номером {number} отмечен как неотфармленный.")
 
 def clear_all(message):
@@ -288,6 +301,8 @@ def clear_all(message):
 
     cursor.execute("UPDATE accounts SET farmed = 0")
     conn.commit()
+    update("commit")
+    # conn.commit()
     bot.reply_to(message,"Все аккаунты отмечены как неотфармленные.")
 
 def ban_account(message):
@@ -314,7 +329,9 @@ def ban_account(message):
                     SET banned = 1, banned_until = ? 
                     WHERE number = ?
                 """, (iso_date, number))
-        conn.commit()
+        
+        update("commit")
+        # conn.commit()
     except ValueError:
         bot.reply_to(message,"Пожалуйста, предоставьте действительное количество дней бана.")
     else:
@@ -330,7 +347,8 @@ def unban_account(message):
             SET banned = 0, banned_until = ? 
             WHERE number = ?
         """, (0, number))
-    conn.commit()
+    update("commit")
+    # conn.commit()
     bot.reply_to(message, f"Аккаунт с номером {number} отмечен как незабаненный.")
 
 def trigger_bancheck(message):
@@ -354,7 +372,8 @@ def edit_account(message):
     if collumn.lower() in ALLOWED_COLUMNS:
         query = f"UPDATE accounts SET {collumn} = ? WHERE number = ?"
         cursor.execute(query, (value, number))
-        conn.commit()
+        update("commit")
+        # conn.commit()
         bot.reply_to(message, f"Аккаунт с номером {number} обновлён.\n{collumn} -> {value}")
     else:
         bot.reply_to(message,f"Ошибка: значение атрибута {collumn} нельзя устанавливать.")
@@ -367,12 +386,45 @@ def delete_account(message):
     print(number)
 
     cursor.execute("DELETE FROM accounts WHERE number = ?", (number,))
-    conn.commit()
+    update("commit")
+    # conn.commit()
     bot.reply_to(message, f"Аккаунт с номером {number} удалён из базы.")
 
 def auth_timer(user_id):
     sleep(authDurationSec)
     authenticated[user_id] = False
+
+def autocommit(message):
+    global autoCommit
+    if not(is_user(message.from_user.id) and is_authenticated(message)):
+        return
+    args = message.text.split()
+    if len(args) < 2:
+        bot.reply_to(message,"Пожалуйста, укажите, включить или выключить автосохранение.\nСинтаксис: /autocommit <on/off>")
+        return
+    if args[1].lower() not in ["on", "off"]:
+        bot.reply_to(message,"Вы ввели недействительное значение.\non - включить автосохранение\noff - выключить автосохранение")
+        return
+
+    with open('config.py', 'r', encoding='utf-8') as f:
+        content = f.read()
+
+    if args[1].lower() == "on":
+        if autoCommit!=True:
+            autoCommit = True
+            update_cmds()
+            new_content = sub(r'(autoCommit\s*=\s*)False', r'\1True', content)
+            with open('config.py', 'w', encoding='utf-8') as f:
+                f.write(new_content)
+        return
+    if autoCommit!=False:
+        autoCommit = False
+        new_content = sub(r'(autoCommit\s*=\s*)True', r'\1False', content)
+        with open('config.py', 'w', encoding='utf-8') as f:
+            f.write(new_content)
+    update_cmds()
+    return
+
 
 def authenticate(message): # if else if else if else if else if else if else if else if else if else
     if not(is_user(message.from_user.id)):
@@ -391,6 +443,15 @@ def authenticate(message): # if else if else if else if else if else if else if 
     authenticated[user_id] = True
     threading.Thread(target=auth_timer, args=(user_id,), daemon=True).start()
     bot.reply_to(message,f"Вы успешно аутентифицированы на *{authDuration} минут*.",parse_mode="Markdown")
+
+def commit_cmd(message):
+    if not(is_user(message.from_user.id)):
+        return
+    update("commit",True)
+def rollback_cmd(message):
+    if not(is_user(message.from_user.id)):
+        return
+    update("rollback",True)
 
 @bot.message_handler(commands=['migrate']) # create unique index for the numbers (to migrate from older versions without the unique index)
 def migrate(message):
@@ -420,7 +481,8 @@ def migrate(message):
         if not old_cols:
             # Table doesn't exist yet, just create it
             cursor.execute(new_schema)
-            conn.commit()
+            update("commit")
+            # conn.commit()
             print("Table created from scratch.")
             return
 
@@ -443,7 +505,8 @@ def migrate(message):
 
         # 7. Clean up
         cursor.execute("DROP TABLE old_accounts")
-        conn.commit()
+        update("commit")
+        # conn.commit()
         bot.reply_to(message,f"Миграция завершена успешно. Перенесено: {common_cols}")
 
     except sqlite3.Error as e:
@@ -458,7 +521,8 @@ def execute(message):
     args = message.text.split()
     command=" ".join(args[1:])
     cursor.execute(command)
-    conn.commit()
+    update("commit")
+    # conn.commit()
 
 @bot.message_handler(commands=['disconnect'])
 def close_connection(message):
@@ -538,7 +602,7 @@ def check_expired_bans(force=False,user_id=None):
     if expired_accounts:
         account_list = "\n".join([f"№{acc[0]}: {acc[1]}" for acc in expired_accounts])
         print(f"Обнаружены аккаунты с истёкшим баном! ")
-        append="\nОни не были отмечены разбаненными автоматически. Необходимо сделать это вручную: /unban <номер>"
+        append="\nОни не были отмечены разбаненными автоматически. Вам необходимо сделать это вручную: /unban <номер>"
         if clearUnbansOnStart is True or force is True:
             append="\nОни были отмечены разбаненными автоматически."
             cursor.execute("""
@@ -546,7 +610,8 @@ def check_expired_bans(force=False,user_id=None):
                 SET banned = 0, banned_until = 0 
                 WHERE banned = 1 AND banned_until <= ?
             """, (today,))
-            conn.commit()
+            update("commit")
+            # conn.commit()
             if force is True:
                 bot.send_message(user_id,f"Обнаружены и отмечены разбаненными следующие аккаунты:\n{account_list}")
         if checkUnbansOnStart is True and force is False:
@@ -559,8 +624,16 @@ def check_expired_bans(force=False,user_id=None):
         if force is True:
             bot.send_message(user_id,"Истёкших банов не найдено.")
 
+def update_cmds():
+    if autoCommit is True:
+        bot.set_my_commands([telebot.types.BotCommand(c["cmd"], c["desc"]) for c in (COMMANDS + commit_cmds)])
+        print("Список команд обновлён (автосохранение вкл.)")
+        return
+    bot.set_my_commands([telebot.types.BotCommand(c["cmd"], c["desc"]) for c in COMMANDS])
+    print("Список команд обновлён (автосохранение выкл.)")
+    return
 
-bot.set_my_commands([telebot.types.BotCommand(c["cmd"], c["desc"]) for c in COMMANDS])
+update_cmds()
 for cmd in COMMANDS: # for every command in vocabulary COMMANDS, do:
     func = globals()[cmd["func"]] # find the function in "func" that corresponds to "cmd" in vocabulary
     bot.message_handler(commands=[cmd["cmd"]])(func) # create a handler for the found command and bind it to its found function
