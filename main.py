@@ -275,7 +275,6 @@ def farm_account(message):
             SET farmed = ? 
             WHERE number = ?
         """, (1, number))
-    conn.commit()
     update("commit")
     # conn.commit()
     bot.reply_to(message,f"Аккаунт с номером {number} отмечен как отфармленный.")
@@ -290,7 +289,6 @@ def unfarm_account(message):
             SET farmed = ? 
             WHERE number = ?
         """, (0, number))
-    conn.commit()
     update("commit")
     # conn.commit()
     bot.reply_to(message, f"Аккаунт с номером {number} отмечен как неотфармленный.")
@@ -300,7 +298,6 @@ def clear_all(message):
         return
 
     cursor.execute("UPDATE accounts SET farmed = 0")
-    conn.commit()
     update("commit")
     # conn.commit()
     bot.reply_to(message,"Все аккаунты отмечены как неотфармленные.")
