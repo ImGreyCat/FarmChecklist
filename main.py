@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 import threading
+from re import sub
 import telebot
 import sqlite3
 from time import sleep
@@ -49,8 +50,17 @@ except Exception as e:
 else:
     print("Подключение успешно!")
 
-
 authDurationSec = authDuration*60
+
+commit_cmds=[
+    # {"cmd": "commit",
+    # "desc": "Сохранить изменения в базе",
+    # "func": "commit_cmd"},
+    #
+    # {"cmd": "rollback",
+    #  "desc": "Отменить несохранённые изменения",
+    #  "func": "rollback_cmd"}
+]
 
 COMMANDS = [
     {"cmd": "start",
@@ -82,7 +92,7 @@ COMMANDS = [
      "func": "ban_account"},
 
     {"cmd": "unban",
-     "desc": "Отметить аккаунт забаненным",
+     "desc": "Отметить аккаунт разбаненным",
      "func": "unban_account"},
 
     {"cmd": "check_bans",
@@ -101,9 +111,9 @@ COMMANDS = [
      "desc": "Удалить аккаунт из базы",
      "func": "delete_account"},
 
-    {"cmd": "autocommit",
-     "desc": "Настройка автосохранения",
-     "func": "autocommit"},
+    # {"cmd": "autocommit",
+    #  "desc": "Настройка автосохранения",
+    #  "func": "autocommit"},
 
     {"cmd": "auth",
      "desc": "Использовать пароль для админ-команд",
@@ -189,8 +199,10 @@ def check_user(message):
     if not(is_user(message.from_user.id)):
         return
     args = message.text.split()
+    if len(args) < 2:
+        bot.reply_to(message,"Пожалуйста, укажите номер аккаунта для просмотра информации о нём.\nСинтаксис: /check <номер>.")
     number = args[1]
-    result = cursor.execute("SELECT * FROM accounts WHERE number = ?", (number,)).fetchone()
+    result = cursor.execute("SELECT number, name, profile, friend, farmed, banned, banned_until, email, password FROM accounts WHERE number = ?", (number,)).fetchone()
     print(result) # [0] number [1] name [2] profile [3] friend [4] farmed [5] banned [6] banned until [7] email [8] password
     if result is None:
         bot.reply_to(message,f"Аккаунт с номером {number} не был найден в базе.")
@@ -205,22 +217,25 @@ def check_user(message):
         email = result[7]
         password = result[8]
         if result[6] == 0:
-            banned_until = "не забанен"
+            banned_until = ""
         else:
             date = result[6]
             date_object = datetime.strptime(date, '%Y-%m-%d')
-            banned_until = f"{date_object.day}.{date_object.month:02}"
+            banned_until = f"\nЗабанен до: *{date_object.day}.{date_object.month:02}*\n"
 
-        bot.reply_to(message,f"\
-Аккаунт *№{number}*\n\
-Имя: *{name}*\n\
-Ссылка на профиль: *{link}*\n\
-Код друга: *{friend}*\n\
-Отфармлен: *{farmed}*\n\
-Забанен: *{banned}*\n\
-Забанен до: *{banned_until}*\n\
-Почта: *{email}*\n\
-Пароль: *{password}*",parse_mode="Markdown")
+        profile_info_text = [
+            f"Аккаунт *№{number}*\n"
+            f"Имя: *{name}*\n"
+            f"Ссылка на профиль: *{link}*"
+            f"Код друга: *{friend}*"
+            f"Отфармлен: *{farmed}*"
+            f"Забанен: *{banned}*"
+            f"{banned_until}"
+            f"Почта: *{email}*"
+            f"Пароль: *{password}*"
+        ]
+
+        bot.reply_to(message,profile_info_text,parse_mode="Markdown")
     except Exception as e:
         bot.reply_to(message,f"Произошла ошибка при отправке красивого сообщения: {e}.\nРезультат: {result}")
 
