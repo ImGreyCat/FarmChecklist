@@ -114,11 +114,11 @@ COMMANDS = [
     {"cmd": "autocommit",
      "desc": "Настройка автосохранения",
      "func": "autocommit"},
-
-    {"cmd": "auth",
-     "desc": "Использовать пароль для админ-команд",
-     "func": "authenticate"},
 ]
+
+auth_cmd = [{"cmd": "auth",
+     "desc": "Использовать пароль для админ-команд",
+     "func": "authenticate"}]
 
 fancystuff={
     None: "не указано",
@@ -424,10 +424,18 @@ def autocommit(message):
 
 
 def authenticate(message): # if else if else if else if else if else if else if else if else if else
-    if not(is_user(message.from_user.id)):
+    user_id = message.from_user.id
+    if not(is_user(user_id)):
         return
-    if authenticated[message.from_user.id]:
+    if enableAuth == False:
+        return
+    if authenticated[user_id]:
         bot.reply_to(message,"Вы уже аутентифицированы.")
+        return
+    if not authPassword: # пропускаем пользователя если не установлен пароль
+        authenticated[user_id] = True
+        threading.Thread(target=auth_timer, args=(user_id,), daemon=True).start()
+        bot.reply_to(message, f"Вы успешно аутентифицированы на *{authDuration} минут*.", parse_mode="Markdown")
         return
     args = message.text.split()
     if len(args) < 2:
@@ -436,7 +444,6 @@ def authenticate(message): # if else if else if else if else if else if else if 
     if " ".join(args[1:]) != authPassword:
         bot.reply_to(message,"Вы ввели неверный пароль.")
         return
-    user_id = message.from_user.id
     authenticated[user_id] = True
     threading.Thread(target=auth_timer, args=(user_id,), daemon=True).start()
     bot.reply_to(message,f"Вы успешно аутентифицированы на *{authDuration} минут*.",parse_mode="Markdown")
@@ -621,6 +628,14 @@ def check_expired_bans(force=False,user_id=None):
         if force is True:
             bot.send_message(user_id,"Истёкших банов не найдено.")
 
+authenticated={}
+authenticateAll=True if enableAuth is False else False # если выключена авторизация, автоматически авторизуем всех (спагетти код)
+if enableAuth is True:
+    authenticateAll = False
+    COMMANDS.extend(auth_cmd)
+for uid in USERS:
+    authenticated[uid] = authenticateAll
+
 def update_cmds():
     if autoCommit is True:
         bot.set_my_commands([telebot.types.BotCommand(c["cmd"], c["desc"]) for c in (COMMANDS + commit_cmds)])
@@ -635,8 +650,5 @@ for cmd in COMMANDS: # for every command in vocabulary COMMANDS, do:
     func = globals()[cmd["func"]] # find the function in "func" that corresponds to "cmd" in vocabulary
     bot.message_handler(commands=[cmd["cmd"]])(func) # create a handler for the found command and bind it to its found function
 
-authenticated={}
-for uid in USERS:
-    authenticated[uid] = False
 check_expired_bans()
 bot.infinity_polling()
